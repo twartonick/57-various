@@ -1,0 +1,279 @@
+1. uptime    ---> load	averages
+2. dmesg -T | tail ---> kernel	errors
+3. vmstat 1  --->  overall stats by time
+4. mpstat -P ALL 1  --->  CPU balance
+5. pidstat 1  ---> process usage
+6. iostat -xz 1 ---->  disk I/O
+7. free -m   ---->  memory usage
+8. sar -n DEV 1 ---->  network	I/O
+9. sar -n TCP,ETCP 1  --->  TCP	stats
+10. top  ---->  check overview
+
+
+Parsing log files:
+
+Let’s say I want to know how many destination IPs appeared in a certain policy rule. The relevant policy-id in my log files is “219” (grep id=219). To avoid problems with double spaces, I delete them (tr -s ‘ ‘). The destination IP address field is the 23th field in the log entries – I only want to see them. Since the delimiter in the log file is space, I have to set it to ‘ ‘ (cut -d ‘ ‘ -f 23). Finally, I sort this list (sort) and filter multiple entries (uniq). 
+
+
+weberjoh@jw-nb10:~$ cat 2015-01-01.fd-wv-fw01.log | grep id=219 | tr -s ' ' | cut -d ' ' -f 23 | sort | uniq
+
+dst=77.0.74.170
+dst=77.0.77.111
+dst=79.204.238.115
+dst=93.220.253.102
+
+f I want to have the whole log entry lines (and not only the IP addresses), I can use sort for the 23th field (sort -k 23,24) and uniq for the 23th field (= skip the first 22 fields) while only comparing the following 20 chars (uniq -f 22 -w 20). This is the result:
+
+weberjoh@jw-nb10:~$ cat 2015-01-01.fd-wv-fw01.log | grep id=219 | tr -s ' ' | sort -k 23,24 | uniq -f 22 -w 20
+
+Jan 1 02:17:11 172.16.1.1 fd-wv-fw01: NetScreen device_id=fd-wv-fw01 [Root]system-notification-00257(traffic): start_time="2014-12-31 04:56:53" duration=76818 policy_id=219 service=tcp/port:30005 proto=6 src zone=DMZ dst zone=Untrust2 action=Permit sent=15235078 rcvd=130943813 src=192.168.110.12 dst=77.0.74.170 src_port=49913 dst_port=30005 src-xlated ip=10.49.254.5 port=2364 dst-xlated ip=77.0.74.170 port=30005 session_id=4296 reason=Close - TCP RST
+Jan 1 05:53:02 172.16.1.1 fd-wv-fw01: NetScreen device_id=fd-wv-fw01 [Root]system-notification-00257(traffic): start_time="2015-01-01 04:55:25" duration=3457 policy_id=219 service=tcp/port:30005 proto=6 src zone=DMZ dst zone=Untrust2 action=Permit sent=386518 rcvd=1532970 src=192.168.110.12 dst=77.0.77.111 src_port=50279 dst_port=30005 src-xlated ip=10.49.254.5 port=1701 dst-xlated ip=77.0.77.111 port=30005 session_id=7535 reason=Close - TCP RST
+Jan 1 04:36:29 172.16.1.1 fd-wv-fw01: NetScreen device_id=fd-wv-fw01 [Root]system-notification-00257(traffic): start_time="2014-12-31 05:54:15" duration=81734 policy_id=219 service=tcp/port:30005 proto=6 src zone=DMZ dst zone=Untrust2 action=Permit sent=18559326 rcvd=63638696 src=192.168.110.12 dst=79.204.238.115 src_port=49925 dst_port=30005 src-xlated ip=10.49.254.5 port=2721 dst-xlated ip=79.204.238.115 port=30005 session_id=4147 reason=Close - TCP RST
+Jan 1 05:53:04 172.16.1.1 fd-wv-fw01: NetScreen device_id=fd-wv-fw01 [Root]system-notification-00257(traffic): start_time="2014-12-31 05:54:18" duration=86326 policy_id=219 service=tcp/port:30005 proto=6 src zone=DMZ dst zone=Untrust2 action=Permit sent=24870176 rcvd=276776662 src=192.168.110.12 dst=93.220.253.102 src_port=49926 dst_port=30005 src-xlated ip=10.49.254.5 port=1858 dst-xlated ip=93.220.253.102 port=30005 session_id=4483 reason=Close - TCP RST
+
+Another example is the count of connections from host y, sorted by its destinations. The starting point is the source IP address (grep src=192.168.113.11). Double spaces should be removed (tr -s ‘ ‘). Only the destination IP address is relevant, which is the 23th field (cut -d ‘ ‘ -f 23). The output is sorted (sort) and counted per unique entries (uniq -c). To have the counters sorted by its numerical value, another (sort -g -r) is used. This is it:
+
+weberjoh@jw-nb10:~$ cat 2015-01-0* | grep src=192.168.113.11 | tr -s ' ' | cut -d ' ' -f 23 | sort | uniq -c | sort -g -r
+ 209319 dst=8.8.8.8
+   2851 dst=88.198.52.243
+    230 dst=198.20.8.241
+    209 dst=224.0.0.251
+    159 dst=198.20.8.246
+    102 dst=192.168.5.1qman uniq
+
+     50 dst=93.184.221.109
+     11 dst=172.16.1.5
+      9 dst=91.189.92.152
+      5 dst=91.189.95.36
+      4 dst=141.30.13.10
+      3 dst=192.168.9.6
+      2 dst=218.2.0.123
+      2 dst=103.41.124.53
+      1 dst=78.223.8.102
+      1 dst=77.0.138.150
+      1 dst=61.174.50.229
+
+
+Summary of Session-End Reasons
+
+Grep every log entry that has the keyword “reason” in it (grep reason), followed by a replacement of the whole line until the last field, which is the reason entry. This is done via the regex that is replaced by nothing (sed s/.*reason.//). Finally, similar to the examples above, sorting the output, counting the unique entries and sorting the counts. Here it is:
+
+weberjoh@jw-nb10:~$ cat 2015-01-01.fd-wv-fw01.log | grep reason | sed s/.*reason.// | sort | uniq -c | sort -g -r
+ 311970 Close - RESP
+ 219406 Close - AGE OUT
+  69236 Traffic Denied
+  56179 Close - TCP FIN
+   3621 Close - ICMP Unreach
+   2968 Close - TCP RST
+    191 Creation
+     34 Close - ALG
+     24 Close - OTHER
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+[16/Oct/2003:09:58:15 -0700] "GET /html/rex.html HTTP/1.1" 200 "-" 330
+
+It's situations like this where I like to use the cut command to extract just the column I'm looking for and then grep it for the return code:
+cat myapache_log.20031016 | cut -d' ' -f6 | grep "200" | wc -l
+
+On the cut command, the -d' ' option tells it to use the space character as the delimiter when identifying columns, instead of the default tab character. And the -f6 option tells it to grab field number 6.
+
+Now suppose somebody on the biz side needs to know how many pages were requested from the site during the 9 a.m. hour. Again, using cut, it's a snap—instead of the space delimiter, we can use the colon and grep for the right hour. That would be in field 2 since we're splitting on the colons and not the spaces.:
+cat myapp_log.20031016 | cut -d':' -f2 | grep "09" | wc -l
+
+Sort and uniq
+The other two UNIX commands I've found useful when parsing log files are sort and uniq. Say you want to look at all the pages requested from your site, in alphabetical order. The command would look something like this:
+cat myapp_log.20031016 | cut -d' ' -f4 | sort
+
+But that gives you all the pages requested. If you're not interested in all requests, but only the unique pages, whether they were requested once or a million times, then you would just filter through the uniq command:
+cat myapp_log.20031016 | cut -d' ' -f4 | sort | uniq
+
+Beyond the basics
+Clearly these are just simple parsing commands. I find them most useful when I'm doing something like investigating a suspicious spike in traffic. For example, something where you're not really sure what you're looking for, so you need to do a lot of quick-and-dirty extractions from the log file trying to find unusual patterns or statistics.
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Column selection mode
+
+A column is one character position. In this mode cut acts as a generalized for files substr function. Classic Unix cat cannot count characters from the back of the line like Perl substr function, but rcut can ). This type of selection is specified with -c option. List entries can be open (from the beginning like in -5, or to the end like in 6-) , or closed (like 6-9).
+
+cut -c 4,5,20 foo
+cuts file foo at columns 4, 5, and 20.
+cut -c 1-5 a.dat | more
+print the first 5 characters of every line in the file a.dat
+cut -c -5 a.dat | more
+same as above but using open range
+Field selection mode
+
+In this mode cut selects not characters but fields delimited by specific single character delimiter specified by option -d. The list of fields is specified with -f option ( -f [list] )
+
+cut -d ":" -f1,7 /etc/passwd
+cuts fields 1 and 7 from /etc/passwd
+cut -d ":" -f 1,6- /etc/passwd 
+cuts fields 1, 6 to the end from /etc/passwd
+The default delimiter is TAB. If space is used as a delimiter, be sure to put it in quotes (-d " ").
+
+To deal with multiple delimiters (for example multiple blanks separating fields, you need either use Perl or preprocess the record with tr (the latter has option -s, --squeeze-repeats, -- replace each input sequence of a repeated character that is listed in SET1 with a single occurrence of that character )
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+awk and log parsing
+
+Find the number of total unique visitors: 
+
+cat access.log | awk '{print $1}' | sort | uniq -c | wc -l 
+
+2. Find the number of unique visitors today: 
+
+cat access.log | grep `date '+%e/%b/%G'` | awk '{print $1}' | sort | uniq -c | wc -l 
+
+3. Find the number of unique visitors this month: 
+
+cat access.log | grep `date '+%b/%G'` | awk '{print $1}' | sort | uniq -c | wc -l 
+
+4. Find the number of unique visitors on arbitrary date – for example March 22nd of 2007: 
+
+cat access.log | grep 22/Mar/2007 | awk '{print $1}' | sort | uniq -c | wc -l 
+
+5. (based on #3) Find the number of unique visitors for the month of March: 
+
+cat access.log | grep Mar/2007 | awk '{print $1}' | sort | uniq -c | wc -l 
+
+6. Show the sorted statistics of “number of visits/requests” “visitor’s IP address”: 
+
+cat access.log | awk '{print "requests from " $1}' | sort | uniq -c | sort 
+
+7. Similarly by adding “grep date”, as in above tips, the same statistics will be produces for “that” date: 
+
+cat access.log | grep 26/Mar/2007 | awk '{print "requests from " $1}' | sort | uniq -c | sort
+
+Most Common 404s (Page Not Found) 
+cut -d'"' -f2,3 /var/log/apache/access.log | awk '$4=404{print $4" "$2}' | sort | uniq -c | sort -rg 
+
+2 - Count requests by HTTP code 
+
+cut -d'"' -f3 /var/log/apache/access.log | cut -d' ' -f2 | sort | uniq -c | sort -rg
+
+3 - Largest Images 
+cut -d'"' -f2,3 /var/log/apache/access.log | grep -E '\.jpg|\.png|\.gif' | awk '{print $5" "$2}' | sort | uniq | sort -rg 
+
+4 - Filter Your IPs Requests 
+tail -f /var/log/apache/access.log | grep 
+
+5 - Top Referring URLS
+cut -d'"' -f4 /var/log/apache/access.log | grep -v '^-#39; | grep -v '^http://www.yoursite.com' | sort | uniq -c | sort -rg
+
+6 - Watch Crawlers Live 
+For this we need an extra file which we'll call bots.txt. Here's the contents: 
+
+
+Bot
+Crawl
+ai_archiver
+libwww-perl
+spider
+Mediapartners-Google
+slurp
+wget
+httrack
+
+
+This just helps is to filter out common user agents used by crawlers. 
+Here's the command: 
+tail -f /var/log/apache/access.log | grep -f bots.txt 
+
+7 - Top Crawlers
+This command will show you all the spiders that crawled your site with a count of the number of requests.
+cut -d'"' -f6 /var/log/apache/access.log | grep -f bots.txt | sort | uniq -c | sort -rg
+
+
+How To Get A Top Ten
+You can easily turn the commands above that aggregate (the ones using uniq) into a top ten by adding this to the end:
+| head
+
+That is pipe the output to the head command.
+Simple as that.
+
+Zipped Log Files
+If you want to run the above commands on a logrotated file, you can adjust easily by starting with a zcat on the file then piping to the first command (the one with the filename).
+
+So this:
+cut -d'"' -f3 /var/log/apache/access.log | cut -d' ' -f2 | sort | uniq -c | sort -rg
+Would become this:
+zcat /var/log/apache/access.log.1.gz | cut -d'"' -f3 | cut -d' ' -f2 | sort | uniq -c | sort -rg
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+LSOF
+
+Show apps that use internet connection at the moment. 
+lsof -P -i -n
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+mod_heartbeat
+
+mod_jk
+
+https://www.howtoforge.com/high_availability_heartbeat_centos
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+Java
+
+root@server1:~# jmap -heap <pid--ex--11243>
+
+
+while true; do cat /proc/$(pgrep -f tomcat)/status | grep Threads; sleep 3; done
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+stacktrace:
+
+twartonick@prod-boi-service-athena-app2:~$ sudo -u tomcat7 jps -l
+ 
+3042 org.apache.catalina.startup.Bootstrap
+23300 sun.tools.jps.Jps
+twartonick@server1:~$ 
+
+jstack <pid>  >> threaddumps.log
+
+
+
+BASH script to get consecutive thread dumps:
+
+#!/bin/bash
+
+if [ $# -eq 0 ]; then
+    echo >&2 "Usage: jstackSeries  [ count [ delay ] ]"
+    echo >&2 "    Defaults: count = 10, delay = 1 (seconds)"
+    exit 1
+fi
+
+pid=$1          # required
+count=${2:-10}  # defaults to 10 times
+delay=${3:-1} # defaults to 1 second
+
+while [ $count -gt 0 ]
+do
+    jstack $pid >jstack.$pid.$(date +%H%M%S.%N)
+    sleep $delay
+    let count--
+    echo -n "."
+done
+
+usage: jstackSeries <pid> 10 5
+
+*************************************************
+
+/$ FILEPATH=/tmp/$(hostname)_$(date +%Y-%m-%d_%H-%M-%S).hprof && sudo -u tomcat7 jmap -dump:file=$FILEPATH $(pgrep -u tomcat7 java) && sudo curl -H 'Transfer-Encoding: chunked' -H "Filename: $(hostname)" -T $FILEPATH -XPOST http://(destination server upload path:8002/upload) && sudo rm $FILEPATH || echo "Failed to curl file, try curl again"
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+Netstat like
+
+ss -tn -o | awk '$2 != "0" { print $0 }'
+
+'awk '$2 == "0" { print $0 }'
+
+
+
